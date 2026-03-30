@@ -1,0 +1,5 @@
+apiVersion: v2
+name: kyma-go-service
+description: Go app for Kyma
+version: 0.1.0
+appVersion: "1.0"

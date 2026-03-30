@@ -1,0 +1,10 @@
+replicaCount: 1
+
+image:
+  repository: sbdoddi/kyma-go-service
+  tag: v2
+  pullPolicy: IfNotPresent
+
+service:
+  port: 80
+  targetPort: 8080
