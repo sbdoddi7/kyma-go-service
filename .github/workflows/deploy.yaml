@@ -38,6 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
 
+
+	environment: dev
     steps:
       # 🔹 Checkout
       - name: Checkout
