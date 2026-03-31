@@ -1,0 +1,94 @@
+name: CI-CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - master
+
+  push:
+    branches:
+      - master
+
+jobs:
+
+  # 🟢 CI JOB (Validation)
+  ci:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+
+      - name: Build
+        run: go build ./cmd/server
+
+      - name: Test
+        run: go test ./...
+
+  # 🚀 CD JOB (Deploy)
+  cd:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      # 🔹 Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 🔹 Setup Go (optional validation)
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+
+      - name: Build
+        run: go build ./cmd/server
+
+      # 🔹 Set Image Tag (commit SHA)
+      - name: Set Image Tag
+        run: echo "TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      # 🔹 Login to Docker Hub
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # 🔹 Setup Docker Buildx (for Mac/ARM compatibility)
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 🔹 Build & Push Image
+      - name: Build and Push
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -t ${{ secrets.DOCKER_USERNAME }}/kyma-go-service:${{ env.TAG }} \
+            --push .
+
+      # 🔹 Setup Kubeconfig
+      - name: Set Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+
+      # 🔹 Install Helm
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      # 🔹 Deploy via Helm
+      - name: Deploy to Kyma
+        run: |
+          helm upgrade --install kyma-go-service ./deployments/helm/kyma-go-service \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/kyma-go-service \
+            --set image.tag=${{ env.TAG }}
+
+      # 🔹 Verify rollout
+      - name: Verify Deployment
+        run: kubectl rollout status deployment kyma-go-service
