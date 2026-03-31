@@ -1,61 +1,94 @@
-name: CI/CD Pipeline
+name: CI-CD Pipeline
 
 on:
   pull_request:
     branches:
-      - master   # validate PRs (CI)
+      - main
 
   push:
     branches:
-      - master   # deploy after merge (CD)
+      - main
 
 jobs:
-  build-and-deploy:
+
+  # 🟢 CI JOB (Validation)
+  ci:
+    name: Build & Test
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     steps:
-      # Checkout code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Setup Go
-      - name: Set up Go
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.26
+          go-version: 1.22
 
-      # Build Go app
       - name: Build
         run: go build ./cmd/server
 
-      # Login to Docker Hub
+      - name: Test
+        run: go test ./...
+
+  # 🚀 CD JOB (Deploy)
+  cd:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      # 🔹 Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 🔹 Setup Go (optional validation)
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+
+      - name: Build
+        run: go build ./cmd/server
+
+      # 🔹 Set Image Tag (commit SHA)
+      - name: Set Image Tag
+        run: echo "TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      # 🔹 Login to Docker Hub
       - name: Login to Docker Hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      # Generate image tag (commit SHA)
-      - name: Set Image Tag
-        id: vars
-        run: echo "TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      # 🔹 Setup Docker Buildx (for Mac/ARM compatibility)
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # Build & Push Docker Image
-      - name: Build and Push Image
+      # 🔹 Build & Push Image
+      - name: Build and Push
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/kyma-go-service:${{ env.TAG }} .
-          docker push ${{ secrets.DOCKER_USERNAME }}/kyma-go-service:${{ env.TAG }}
+          docker buildx build \
+            --platform linux/amd64 \
+            -t ${{ secrets.DOCKER_USERNAME }}/kyma-go-service:${{ env.TAG }} \
+            --push .
 
-      # Setup kubectl
+      # 🔹 Setup Kubeconfig
       - name: Set Kubeconfig
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
 
-      # Setup Helm
+      # 🔹 Install Helm
       - name: Setup Helm
         uses: azure/setup-helm@v4
 
-      # Deploy using Helm
+      # 🔹 Deploy via Helm
       - name: Deploy to Kyma
         run: |
           helm upgrade --install kyma-go-service ./deployments/helm/kyma-go-service \
             --set image.repository=${{ secrets.DOCKER_USERNAME }}/kyma-go-service \
             --set image.tag=${{ env.TAG }}
+
+      # 🔹 Verify rollout
+      - name: Verify Deployment
+        run: kubectl rollout status deployment kyma-go-service
