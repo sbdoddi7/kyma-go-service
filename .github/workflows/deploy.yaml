@@ -36,7 +36,7 @@ jobs:
   cd:
     name: Build, Push & Deploy
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'pull_request'
 
     environment: dev
 
@@ -79,6 +79,11 @@ jobs:
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+
+      - name: Debug kubeconfig
+        run: |
+          echo "===== KUBECONFIG ====="
+          cat ~/.kube/config
 
       # 🔹 Install Helm
       - name: Setup Helm
