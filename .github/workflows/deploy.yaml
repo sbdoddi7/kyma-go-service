@@ -80,6 +80,11 @@ jobs:
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
 
+      - name: Debug kubeconfig
+        run: |
+          echo "===== KUBECONFIG ====="
+          cat ~/.kube/config
+
       # 🔹 Install Helm
       - name: Setup Helm
         uses: azure/setup-helm@v4
